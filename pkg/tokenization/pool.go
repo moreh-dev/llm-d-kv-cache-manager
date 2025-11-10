@@ -90,13 +90,13 @@ func NewTokenizationPool(config *Config, store prefixstore.Indexer) (*Pool, erro
 	var tokenizer Tokenizer
 	var err error
 	switch {
-	case config.HFTokenizerConfig != nil:
-		tokenizer, err = NewCachedHFTokenizer(config.HFTokenizerConfig)
+	case config.UdsTokenizerConfig != nil:
+		tokenizer, err = NewUdsTokenizer(config.UdsTokenizerConfig)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create tokenizer: %w", err)
 		}
-	case config.UdsTokenizerConfig != nil:
-		tokenizer, err = NewUdsTokenizer(config.UdsTokenizerConfig)
+	case config.HFTokenizerConfig != nil:
+		tokenizer, err = NewCachedHFTokenizer(config.HFTokenizerConfig)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create tokenizer: %w", err)
 		}
