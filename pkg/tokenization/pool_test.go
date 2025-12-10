@@ -57,9 +57,9 @@ func (m *MockTokenizer) RenderChatTemplate(
 	return args.String(0), args.Error(1)
 }
 
-func (m *MockTokenizer) Encode(input, modelName string) ([]uint32, []tokenizers.Offset, error) {
-	args := m.Called(input, modelName)
-	return args.Get(0).([]uint32), args.Get(1).([]tokenizers.Offset), args.Error(2) //nolint:errcheck // return mocked values
+func (m *MockTokenizer) Encode(req *preprocessing.EncodeRequest) ([]uint32, []tokenizers.Offset, error) {
+	args := m.Called(req)
+	return args.Get(0).([]uint32), args.Get(1).([]tokenizers.Offset), args.Error(2)
 }
 
 func (m *MockTokenizer) Type() string {
@@ -202,7 +202,12 @@ func setupStressTest(b *testing.B) *Pool {
 	require.NoError(b, err)
 
 	for _, modelName := range benchmarkModels {
-		_, _, err := pool.tokenizer.Encode("", modelName)
+		_, _, err := pool.tokenizer.Encode(&preprocessing.EncodeRequest{
+			ChatTemplateRequest: preprocessing.ChatTemplateRequest{
+				Model: modelName,
+			},
+			Text: "",
+		})
 		require.NoError(b, err)
 	}
 	return pool

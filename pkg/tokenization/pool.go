@@ -209,7 +209,13 @@ func (pool *Pool) processTask(task Task) error {
 
 	// if the overlap ratio is low, get the full tokenization
 	if overlapRatio < pool.minPrefixOverlapRatio {
-		tokens, offsets, err := pool.tokenizer.Encode(task.Prompt, task.ModelName)
+		tokens, offsets, err := pool.tokenizer.Encode(&preprocessing.EncodeRequest{
+			ChatTemplateRequest: preprocessing.ChatTemplateRequest{
+				Model:    task.ModelName,
+				Revision: task.RenderReq.Revision,
+			},
+			Text: task.Prompt,
+		})
 		if err != nil {
 			log.Log.Error(err, "failed to encode tokens", "prompt", task.Prompt, "modelName", task.ModelName)
 			return err

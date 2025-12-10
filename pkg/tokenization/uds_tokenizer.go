@@ -105,18 +105,18 @@ func NewUdsTokenizer(config *UdsTokenizerConfig) (Tokenizer, error) {
 }
 
 // Encode tokenizes the input string and returns the token IDs and offsets.
-func (u *UdsTokenizer) Encode(input, modelName string) ([]uint32, []tokenizers.Offset, error) {
-	req, err := http.NewRequestWithContext(
+func (u *UdsTokenizer) Encode(req *preprocessing.EncodeRequest) ([]uint32, []tokenizers.Offset, error) {
+	httpReq, err := http.NewRequestWithContext(
 		context.Background(),
 		http.MethodPost,
 		u.baseURL+"/tokenize",
-		strings.NewReader(input),
+		strings.NewReader(req.Text),
 	)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	respBody, err := u.executeRequest(req, defaultTimeout, defaultMaxRetries)
+	respBody, err := u.executeRequest(httpReq, defaultTimeout, defaultMaxRetries)
 	if err != nil {
 		return nil, nil, fmt.Errorf("tokenize request failed: %w", err)
 	}
@@ -133,7 +133,7 @@ func (u *UdsTokenizer) Encode(input, modelName string) ([]uint32, []tokenizers.O
 func (u *UdsTokenizer) RenderChatTemplate(
 	_ string, renderReq *preprocessing.RenderJinjaTemplateRequest,
 ) (string, error) {
-	messagesBytes, err := json.Marshal(renderReq.Conversations)
+	messagesBytes, err := json.Marshal(renderReq.Conversation)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal chat-completions messages: %w", err)
 	}

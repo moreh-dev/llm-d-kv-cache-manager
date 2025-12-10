@@ -140,12 +140,12 @@ func TestRenderJinjaTemplate(t *testing.T) {
 	tests := []struct {
 		name     string
 		template string
-		messages []preprocessing.ChatMessage
+		messages []preprocessing.Conversation
 	}{
 		{
 			name:     "Simple ChatTemplate",
 			template: simpleTemplate,
-			messages: []preprocessing.ChatMessage{
+			messages: []preprocessing.Conversation{
 				{Role: "user", Content: "Hello"},
 				{Role: "assistant", Content: "Hi there!"},
 			},
@@ -153,7 +153,7 @@ func TestRenderJinjaTemplate(t *testing.T) {
 		{
 			name:     "Complex ChatTemplate with System Message",
 			template: complexTemplate,
-			messages: []preprocessing.ChatMessage{
+			messages: []preprocessing.Conversation{
 				{Role: "system", Content: "You are a helpful AI assistant."},
 				{Role: "user", Content: "What is the weather like?"},
 				{Role: "assistant", Content: "I don't have access to real-time weather data."},
@@ -162,7 +162,7 @@ func TestRenderJinjaTemplate(t *testing.T) {
 		{
 			name:     "Complex ChatTemplate without System Message",
 			template: complexTemplate,
-			messages: []preprocessing.ChatMessage{
+			messages: []preprocessing.Conversation{
 				{Role: "user", Content: "Tell me a joke"},
 				{Role: "assistant", Content: "Why don't scientists trust atoms? Because they make up everything!"},
 			},
@@ -172,8 +172,8 @@ func TestRenderJinjaTemplate(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			request := &preprocessing.RenderJinjaTemplateRequest{
-				Conversations: tt.messages,
-				ChatTemplate:  tt.template,
+				Conversation: tt.messages,
+				ChatTemplate: tt.template,
 			}
 
 			// Profile the function call
@@ -184,13 +184,13 @@ func TestRenderJinjaTemplate(t *testing.T) {
 			// Assertions
 			require.NoError(t, err, "RenderChatTemplate should not return an error")
 			assert.NotNil(t, response, "Response should not be nil")
-			assert.NotEmpty(t, response.RenderedChats, "Rendered chats should not be empty")
+			assert.NotEmpty(t, response, "Rendered chats should not be empty")
 
 			// Log performance
-			t.Logf("ChatTemplate: %s, Duration: %v, Rendered length: %d", tt.name, duration, len(response.RenderedChats[0]))
+			t.Logf("ChatTemplate: %s, Duration: %v, Rendered length: %d", tt.name, duration, len(response))
 
 			// Verify rendered content
-			rendered := response.RenderedChats[0]
+			rendered := response
 			for _, message := range tt.messages {
 				// For complex templates, the role might not be explicitly shown in output
 				// but the content should always be present
@@ -255,13 +255,13 @@ func TestChatCompletionsIntegration(t *testing.T) {
 	tests := []struct {
 		name         string
 		modelName    string
-		conversation []preprocessing.ChatMessage
+		conversation []preprocessing.Conversation
 		description  string
 	}{
 		{
 			name:      "Simple Conversation",
 			modelName: "ibm-granite/granite-3.3-8b-instruct",
-			conversation: []preprocessing.ChatMessage{
+			conversation: []preprocessing.Conversation{
 				{Role: "user", Content: "What is the capital of France?"},
 				{Role: "assistant", Content: "The capital of France is Paris."},
 			},
@@ -270,7 +270,7 @@ func TestChatCompletionsIntegration(t *testing.T) {
 		{
 			name:      "Multi-turn Conversation",
 			modelName: "microsoft/DialoGPT-medium",
-			conversation: []preprocessing.ChatMessage{
+			conversation: []preprocessing.Conversation{
 				{Role: "user", Content: "Hello, how are you?"},
 				{Role: "assistant", Content: "I'm doing well, thank you! How can I help you today?"},
 				{Role: "user", Content: "Can you tell me about machine learning?"},
@@ -282,7 +282,7 @@ func TestChatCompletionsIntegration(t *testing.T) {
 		{
 			name:      "System Message Conversation",
 			modelName: "ibm-granite/granite-3.3-8b-instruct",
-			conversation: []preprocessing.ChatMessage{
+			conversation: []preprocessing.Conversation{
 				{Role: "system", Content: "You are a helpful AI assistant specialized in coding."},
 				{Role: "user", Content: "Write a Python function to calculate fibonacci numbers."},
 				{Role: "assistant", Content: "Here's a Python function to calculate fibonacci numbers:\n" +
@@ -293,7 +293,7 @@ func TestChatCompletionsIntegration(t *testing.T) {
 		{
 			name:      "Simple Conversation (Repeated)",
 			modelName: "ibm-granite/granite-3.3-8b-instruct",
-			conversation: []preprocessing.ChatMessage{
+			conversation: []preprocessing.Conversation{
 				{Role: "user", Content: "What is the capital of France?"},
 				{Role: "assistant", Content: "The capital of France is Paris."},
 			},
@@ -318,7 +318,7 @@ func TestChatCompletionsIntegration(t *testing.T) {
 			// Step 2: Render the conversation using the template
 			start = time.Now()
 			renderRequest := &preprocessing.RenderJinjaTemplateRequest{
-				Conversations:      tt.conversation,
+				Conversation:       tt.conversation,
 				ChatTemplate:       template,
 				ChatTemplateKWArgs: templateVars,
 			}
@@ -326,10 +326,10 @@ func TestChatCompletionsIntegration(t *testing.T) {
 			renderDuration := time.Since(start)
 			require.NoError(t, err, "Failed to render chat template")
 			assert.NotNil(t, response, "Response should not be nil")
-			assert.NotEmpty(t, response.RenderedChats, "Rendered chats should not be empty")
+			assert.NotEmpty(t, response, "Rendered chats should not be empty")
 
 			// Step 3: Verify the rendered output
-			rendered := response.RenderedChats[0]
+			rendered := response
 			assert.NotEmpty(t, rendered, "Rendered chat should not be empty")
 
 			// Verify all conversation messages are present in the rendered output
@@ -379,7 +379,7 @@ func TestLongChatCompletions(t *testing.T) {
 	require.NoError(t, err, "Failed to clear caches")
 
 	// Create a long conversation
-	longConversation := []preprocessing.ChatMessage{
+	longConversation := []preprocessing.Conversation{
 		{Role: "system", Content: "You are an expert software engineer with deep knowledge of Go, Python, " +
 			"and system design. " +
 			"Provide detailed, accurate responses."},
@@ -420,7 +420,7 @@ func TestLongChatCompletions(t *testing.T) {
 		// Render long conversation
 		start = time.Now()
 		renderRequest := &preprocessing.RenderJinjaTemplateRequest{
-			Conversations:      longConversation,
+			Conversation:       longConversation,
 			ChatTemplate:       template,
 			ChatTemplateKWArgs: templateVars,
 		}
@@ -429,7 +429,7 @@ func TestLongChatCompletions(t *testing.T) {
 		require.NoError(t, err, "Failed to render long conversation")
 
 		// Verify results
-		rendered := response.RenderedChats[0]
+		rendered := response
 		assert.NotEmpty(t, rendered, "Long conversation should render successfully")
 		assert.Greater(t, len(rendered), 1000,
 			"Long conversation should produce substantial output")
@@ -505,7 +505,7 @@ func BenchmarkRenderJinjaTemplate(b *testing.B) {
 	require.NoError(b, err, "Failed to get template for benchmark")
 
 	request := &preprocessing.RenderJinjaTemplateRequest{
-		Conversations: []preprocessing.ChatMessage{
+		Conversation: []preprocessing.Conversation{
 			{Role: "user", Content: "Hello"},
 			{Role: "assistant", Content: "Hi there!"},
 		},
@@ -597,7 +597,7 @@ func runVLLMValidationTest(t *testing.T, modelName, expectedVLLMOutput string) {
 
 	// Test case based on the provided vLLM request
 	request := &preprocessing.RenderJinjaTemplateRequest{
-		Conversations: []preprocessing.ChatMessage{
+		Conversation: []preprocessing.Conversation{
 			{Role: "user", Content: "What is the weather in Paris?"},
 			{Role: "assistant", Content: "Let me check that for you."},
 		},
@@ -632,9 +632,9 @@ func runVLLMValidationTest(t *testing.T, modelName, expectedVLLMOutput string) {
 	// Step 3: Render the conversation with the template
 	response, err := wrapper.RenderChatTemplate(context.Background(), request)
 	require.NoError(t, err, "Failed to render chat template")
-	require.Len(t, response.RenderedChats, 1, "Should have one rendered chat")
+	require.Len(t, response, 1, "Should have one rendered chat")
 
-	renderedOutput := response.RenderedChats[0]
+	renderedOutput := response
 
 	// Step 4: Compare results with flexible date handling
 	compareVLLMOutput(t, renderedOutput, expectedVLLMOutput)
@@ -724,7 +724,7 @@ func TestRenderChatTemplateWithLocalTemplate(t *testing.T) {
 
 	// Now render a conversation using the fetched template
 	renderRequest := &preprocessing.RenderJinjaTemplateRequest{
-		Conversations: []preprocessing.ChatMessage{
+		Conversation: []preprocessing.Conversation{
 			{Role: "user", Content: "Hello from local tokenizer!"},
 			{Role: "assistant", Content: "Hi! I'm using a locally loaded template."},
 		},
@@ -735,10 +735,10 @@ func TestRenderChatTemplateWithLocalTemplate(t *testing.T) {
 	response, err := wrapper.RenderChatTemplate(context.Background(), renderRequest)
 	require.NoError(t, err, "RenderChatTemplate should not return an error")
 	assert.NotNil(t, response, "Response should not be nil")
-	assert.NotEmpty(t, response.RenderedChats, "Rendered chats should not be empty")
+	assert.NotEmpty(t, response, "Rendered chats should not be empty")
 
 	// Verify the rendered content
-	rendered := response.RenderedChats[0]
+	rendered := response
 	assert.Contains(t, rendered, "Hello from local tokenizer!", "Rendered content should contain user message")
 	assert.Contains(t, rendered, "Hi! I'm using a locally loaded template.", "Rendered content should contain assistant message")
 

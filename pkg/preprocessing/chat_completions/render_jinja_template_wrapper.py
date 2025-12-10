@@ -19,8 +19,11 @@ Standalone wrapper for render_jinja_template function from transformers.
 
 import json
 import logging
+import os
+from pydoc import text
 import sys
 from typing import Optional, Union
+from vllm.transformers_utils.tokenizer import get_tokenizer
 
 # Import core functions from transformers - moved to function level to avoid import errors
 TRANSFORMERS_AVAILABLE = None  # Will be set when first needed
@@ -47,16 +50,34 @@ def _ensure_transformers_available():
 logger = logging.getLogger(__name__)
 
 # Module-level cache for templates
+_tokenizer_cache = {}
 _template_cache = {}
-_cache_lock = None
+_tokenizer_cache_lock = None
+_template_cache_lock = None
 
-def _get_cache_lock():
-    """Get or create a threading lock for cache access."""
-    global _cache_lock
-    if _cache_lock is None:
+def _get_tokenizer_cache_lock():
+    """Get or create a threading lock for tokenizer cache access."""
+    global _tokenizer_cache_lock
+    if _tokenizer_cache_lock is None:
         import threading
-        _cache_lock = threading.Lock()
-    return _cache_lock
+        _tokenizer_cache_lock = threading.RLock()
+    return _tokenizer_cache_lock
+
+def clear_tokenizer_caches():
+    """Clear the tokenizer cache for testing purposes."""
+    lock = _get_tokenizer_cache_lock()
+    with lock:
+        global _tokenizer_cache
+        _tokenizer_cache.clear()
+    return "Tokenizer caches cleared"
+
+def _get_template_cache_lock():
+    """Get or create a threading lock for cache access."""
+    global _template_cache_lock
+    if _template_cache_lock is None:
+        import threading
+        _template_cache_lock = threading.Lock()
+    return _template_cache_lock
 
 
 def _collect_template_vars(tokenizer):
@@ -69,9 +90,9 @@ def _collect_template_vars(tokenizer):
     return kwargs
 
 
-def clear_caches():
+def clear_template_caches():
     """Clear all caches for testing purposes."""
-    lock = _get_cache_lock()
+    lock = _get_template_cache_lock()
     with lock:
         global _template_cache
         _template_cache.clear()
@@ -85,6 +106,10 @@ def render_jinja_template(request_json):
 
     Args:
         request_json (str): JSON string containing the request parameters:
+            - is_local (bool, optional): Whether the model is local.
+            - model (str): The model ID or path (HF model ID, local directory path, or path to tokenizer file).
+            - revision (str, optional): Model revision.
+            - token (str, optional): Hugging Face token for private models.
             - conversations (list): List of conversation lists
             - chat_template (str, optional): The template to use
             - tools (list, optional): Tool schemas
@@ -96,116 +121,79 @@ def render_jinja_template(request_json):
     Returns:
         str: JSON string containing 'rendered_chats' and 'generation_indices' keys.
     """
-    if not _ensure_transformers_available():
-        raise ImportError("transformers library is required for render_jinja_template")
-
-    # Import the modules we need
-    from transformers.utils.chat_template_utils import render_jinja_template as transformers_render_jinja_template
-
-    # Parse the JSON request
-    request = json.loads(request_json)
-
-    # Align Go's `messages` field with transformers' `conversations` parameter.
-    if 'messages' in request:
-        request['conversations'] = [request.pop('messages')] # wrap to match expected format
 
     try:
+        # Parse the JSON request
+        request = json.loads(request_json)
+
         # Get template_vars and spread them as individual arguments
         template_vars = request.pop('chat_template_kwargs', {})
         request.update(template_vars)
 
-        rendered_chats, generation_indices = transformers_render_jinja_template(**request)
+        model_name = request.pop("model")
+        revision = request.get("revision", None)
+        is_local = request.pop("is_local", False)
+        token = request.pop("token", "")
+        download_dir = request.pop("download_dir", None)
+        lock = _get_template_cache_lock()
+        with lock:
+            cache_key = f"{model_name}:{revision or 'main'}:{is_local}"
+            tokenizer = _tokenizer_cache.get(cache_key)
+            if tokenizer is None:
+                os.environ["HF_TOKEN"] = token
+                tokenizer = get_tokenizer(model_name, trust_remote_code=True, revision=revision, download_dir=download_dir)
+                _tokenizer_cache[cache_key] = tokenizer
+            
+            request["tokenize"] = False
+            return tokenizer.apply_chat_template(**request)
 
     except Exception as e:
-        raise
-
-    # Return as JSON string, aligning with the Go response struct.
-    result = json.dumps({
-        "rendered_chats": rendered_chats,
-        "generation_indices": generation_indices
-    })
-    return result
+        raise RuntimeError(f"Error rendering Jinja template: {e}") from e
 
 
-def get_model_chat_template(request_json):
+def get_model_chat_template(request_json) -> str:
+    
+    return json.dumps({"chat_template": "", "chat_template_kwargs": {}})
+
+
+def encode(request_json: str) -> str:
     """
-    Load a tokenizer from Hugging Face Hub or local path and return its chat template string and required variables.
+    Encode text using the specified tokenizer.
+
     Args:
-        request_json (str): JSON string containing the request parameters:
-            - model (str): The model ID or path (HF model ID, local directory path, or path to tokenizer file).
-            - chat_template (str, optional): The template name or string to use.
-            - tools (list[dict], optional): Tool schemas to pass.
+        request_json (str): JSON string containing:
+            - model (str): The model ID or path.
             - revision (str, optional): Model revision.
+            - is_local (bool, optional): Whether the model is local.
+            - download_dir (str, optional): Directory to download the model.
+            - text (str): The text to encode.
             - token (str, optional): Hugging Face token for private models.
-            - is_local_path (bool, optional): Whether the model is a local path (default: False).
+
     Returns:
-        str: JSON string containing 'template' and 'kwargs' keys, aligning with the Go response struct.
+        str: JSON string containing 'encoded_texts' key with list of token ID lists.
     """
-    if not _ensure_transformers_available():
-        print("[Python] get_model_chat_template ERROR - Transformers not available")
-        raise ImportError("transformers library is required for get_model_chat_template")
+    try:
+        request = json.loads(request_json)
+        model_name = request["model"]
+        revision = request.get("revision", None)
+        is_local = request.get("is_local", False)
+        download_dir = request.pop("download_dir", None)
+        text = request["text"]
+        token = request.get("token", "")
 
-    # Parse the JSON request
-    request = json.loads(request_json)
+        lock = _get_tokenizer_cache_lock()
+        with lock:
+            cache_key = f"{model_name}:{revision or 'main'}:{is_local}"
+            tokenizer = _tokenizer_cache.get(cache_key)
+            if tokenizer is None:
+                os.environ["HF_TOKEN"] = token
+                tokenizer = get_tokenizer(model_name, trust_remote_code=True, revision=revision, download_dir=download_dir)
+                _tokenizer_cache[cache_key] = tokenizer
 
-    model_name = request.get("model")
-    chat_template = request.get("chat_template")
-    tools = request.get("tools")
-    revision = request.get("revision")
-    token = request.get("token")
-    is_local_path = request.get("is_local_path", False)
+            return json.dumps(tokenizer(text, return_offsets_mapping=True, add_special_tokens=False).data)
 
-    if not model_name:
-        print("[Python] get_model_chat_template ERROR - model_name is required")
-        raise ValueError("model_name is required in request")
-
-    # Create cache key
-    cache_key = f"{model_name}:{revision or 'main'}:{token or 'none'}:{is_local_path}"
-
-    # Check cache first
-    lock = _get_cache_lock()
-    with lock:
-        if cache_key in _template_cache:
-            cached_result = _template_cache[cache_key]
-            # If a specific chat_template was requested, override the cached template
-            if chat_template is not None:
-                cached_result["template"] = chat_template
-            return json.dumps(cached_result)
-
-    # Import the modules we need
-    from transformers import AutoTokenizer
-    import os
-
-    # Determine if we're loading from local path or HuggingFace
-    if is_local_path:
-        # For local paths, model_name can be either a directory containing tokenizer files
-        # or a path to a specific tokenizer file. Ensure we extract the directory if needed.
-        if os.path.isfile(model_name):
-            # If it's a file path (tokenizer.json), get the directory
-            tokenizer_dir = os.path.dirname(model_name)
-        else:
-            # If it's already a directory, use it directly
-            tokenizer_dir = model_name
-
-        print(f"[Python] Loading tokenizer from local path: {tokenizer_dir}")
-        tokenizer = AutoTokenizer.from_pretrained(tokenizer_dir, local_files_only=True, trust_remote_code=True)
-    else:
-        # Load from Hugging Face
-        print(f"[Python] Loading tokenizer from HuggingFace: {model_name}")
-        tokenizer = AutoTokenizer.from_pretrained(model_name, revision=revision, token=token, trust_remote_code=True)
-
-    template = tokenizer.chat_template if chat_template is None else chat_template
-
-    # Collect special tokens
-    template_vars = _collect_template_vars(tokenizer)
-
-    # Cache the result, aligning with the Go response struct.
-    result = {"chat_template": template, "chat_template_kwargs": template_vars}
-    with lock:
-        _template_cache[cache_key] = result.copy()  # Cache a copy to avoid reference issues
-
-    return json.dumps(result)
-
+    except Exception as e:
+        raise RuntimeError(f"Error encoding texts: {e}") from e
 
 def main():
     """Example usage and testing function."""
@@ -253,7 +241,6 @@ def main():
             print(f"Generation indices: {generation_indices[0]}")
     except Exception as e:
         print(f"Error: {e}")
-
 
 if __name__ == "__main__":
     main()

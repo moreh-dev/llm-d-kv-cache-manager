@@ -50,6 +50,7 @@ const char* PyUnicode_AsGoString(PyObject* obj);
 extern PyObject* g_chat_template_module;
 extern PyObject* g_render_jinja_template_func;
 extern PyObject* g_get_model_chat_template_func;
+extern PyObject* g_encode_func;
 
 // Initialize the cached module and functions (call once at startup)
 int Py_InitChatTemplateModule();
@@ -65,6 +66,12 @@ char* Py_CallGetModelChatTemplate(const char* json_request);
 
 // Internal function that does the actual work
 char* Py_CallGetModelChatTemplateInternal(const char* json_request);
+
+// Call the cached encode function
+char* Py_CallEncode(const char* json_request);
+
+// Internal function that does the actual work
+char* Py_CallEncodeInternal(const char* json_request);
 
 // Clear all caches for testing purposes
 char* Py_ClearCaches(void);
