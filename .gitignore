@@ -67,3 +67,7 @@ _cgo_*
 
 # Tokenizer binaries
 /lib
+
+# UDS tokenizer files
+services/uds_tokenizer/models/*
+!services/uds_tokenizer/models/README.md
