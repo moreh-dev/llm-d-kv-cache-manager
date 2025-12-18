@@ -25,7 +25,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/daulet/tokenizers"
 	"go.uber.org/multierr"
 
 	"github.com/llm-d/llm-d-kv-cache/pkg/kvcache/metrics"
@@ -36,7 +35,7 @@ import (
 type Tokenizer interface {
 	ApplyChatTemplate(string, *preprocessing.ApplyChatTemplateRequest) (string, error)
 	// Encode tokenizes the input string and returns the token IDs and offsets.
-	Encode(*preprocessing.EncodeRequest) ([]uint32, []tokenizers.Offset, error)
+	Encode(*preprocessing.EncodeRequest) ([]uint32, []preprocessing.Offset, error)
 	Type() string
 }
 
@@ -351,7 +350,7 @@ func (t *LocalCachedTokenizer) ApplyChatTemplate(
 }
 
 // Encode converts a string into token IDs.
-func (t *HFCachedTokenizer) Encode(req *preprocessing.EncodeRequest) ([]uint32, []tokenizers.Offset, error) {
+func (t *HFCachedTokenizer) Encode(req *preprocessing.EncodeRequest) ([]uint32, []preprocessing.Offset, error) {
 	ctx := context.TODO()
 
 	req.IsLocal = false
@@ -365,7 +364,7 @@ func (t *HFCachedTokenizer) Encode(req *preprocessing.EncodeRequest) ([]uint32, 
 	return tokens, offsets, nil
 }
 
-func (t *LocalCachedTokenizer) Encode(req *preprocessing.EncodeRequest) ([]uint32, []tokenizers.Offset, error) {
+func (t *LocalCachedTokenizer) Encode(req *preprocessing.EncodeRequest) ([]uint32, []preprocessing.Offset, error) {
 	ctx := context.TODO()
 
 	req.IsLocal = true
@@ -450,7 +449,7 @@ func (c *CompositeTokenizer) ApplyChatTemplate(
 //  4. If all fail, returns all accumulated errors
 //
 // This enables prioritizing local tokenizers while maintaining HuggingFace as a fallback.
-func (c *CompositeTokenizer) Encode(req *preprocessing.EncodeRequest) ([]uint32, []tokenizers.Offset, error) {
+func (c *CompositeTokenizer) Encode(req *preprocessing.EncodeRequest) ([]uint32, []preprocessing.Offset, error) {
 	var rErr error
 	for _, tokenizer := range c.Tokenizers {
 		copiedReq, err := req.DeepCopy()

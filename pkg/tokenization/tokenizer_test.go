@@ -23,7 +23,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/daulet/tokenizers"
 	preprocessing "github.com/llm-d/llm-d-kv-cache/pkg/preprocessing/chat_completions"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -42,11 +41,11 @@ func (d *DummyTokenizer) ApplyChatTemplate(
 	return prompt, nil
 }
 
-func (d *DummyTokenizer) Encode(*preprocessing.EncodeRequest) ([]uint32, []tokenizers.Offset, error) {
+func (d *DummyTokenizer) Encode(*preprocessing.EncodeRequest) ([]uint32, []preprocessing.Offset, error) {
 	if d.returnError {
 		return nil, nil, fmt.Errorf("dummy tokenizer error")
 	}
-	return []uint32{1, 2, 3}, []tokenizers.Offset{{0, 1}, {2, 3}, {4, 5}}, nil
+	return []uint32{1, 2, 3}, []preprocessing.Offset{{0, 1}, {2, 3}, {4, 5}}, nil
 }
 
 func (d *DummyTokenizer) Type() string {

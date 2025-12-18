@@ -29,7 +29,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/daulet/tokenizers"
 	preprocessing "github.com/llm-d/llm-d-kv-cache/pkg/preprocessing/chat_completions"
 	"golang.org/x/net/http2"
 )
@@ -52,8 +51,8 @@ type UdsTokenizer struct {
 
 // TokenizedInput represents the response from the tokenize endpoint.
 type TokenizedInput struct {
-	InputIDs      []uint32            `json:"input_ids"`
-	OffsetMapping []tokenizers.Offset `json:"offset_mapping"`
+	InputIDs      []uint32               `json:"input_ids"`
+	OffsetMapping []preprocessing.Offset `json:"offset_mapping"`
 }
 
 const (
@@ -105,7 +104,7 @@ func NewUdsTokenizer(config *UdsTokenizerConfig) (Tokenizer, error) {
 }
 
 // Encode tokenizes the input string and returns the token IDs and offsets.
-func (u *UdsTokenizer) Encode(req *preprocessing.EncodeRequest) ([]uint32, []tokenizers.Offset, error) {
+func (u *UdsTokenizer) Encode(req *preprocessing.EncodeRequest) ([]uint32, []preprocessing.Offset, error) {
 	httpReq, err := http.NewRequestWithContext(
 		context.Background(),
 		http.MethodPost,

@@ -32,7 +32,6 @@ import (
 	"github.com/llm-d/llm-d-kv-cache/pkg/utils/logging"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 )
-import "github.com/daulet/tokenizers"
 
 // Conversation represents a single message in a conversation.
 type Conversation struct {
@@ -98,8 +97,8 @@ func (req *EncodeRequest) DeepCopy() (*EncodeRequest, error) {
 }
 
 type EncodeResponse struct {
-	TokenIDs       []uint32            `json:"input_ids"`
-	OffsetMappings []tokenizers.Offset `json:"offset_mapping"`
+	TokenIDs       []uint32 `json:"input_ids"`
+	OffsetMappings []Offset `json:"offset_mapping"`
 }
 
 // ChatTemplatingProcessor is a processor that handles chat template rendering
@@ -169,7 +168,7 @@ func (w *ChatTemplatingProcessor) ApplyChatTemplate(ctx context.Context,
 func (w *ChatTemplatingProcessor) Encode(
 	ctx context.Context,
 	req *EncodeRequest,
-) ([]uint32, []tokenizers.Offset, error) {
+) ([]uint32, []Offset, error) {
 	traceLogger := log.FromContext(ctx).V(logging.TRACE).WithName("Encode")
 	// Convert request to JSON
 	reqJSON, err := json.Marshal(req)
