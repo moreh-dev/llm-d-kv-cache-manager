@@ -49,7 +49,6 @@ type ChatTemplateRequest struct {
 
 // ApplyChatTemplateRequest represents the request to render a chat template.
 type ApplyChatTemplateRequest struct {
-	// `conversation` is the transformers name, but we use `messages` for consistency with OpenAI API.
 	// The Python wrapper will handle converting this to a batched list if needed.
 	ChatTemplateRequest
 	Conversation              []Conversation         `json:"conversation"`

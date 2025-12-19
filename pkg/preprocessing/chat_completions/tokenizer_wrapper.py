@@ -21,7 +21,6 @@ import json
 import logging
 import os
 import sys
-from typing import Optional, Union
 from vllm.transformers_utils.tokenizer import get_tokenizer
 
 # Basic logging setup
@@ -58,18 +57,17 @@ def apply_chat_template(request_json):
             - model (str): The model ID or path (HF model ID, local directory path, or path to tokenizer file).
             - revision (str, optional): Model revision.
             - token (str, optional): Hugging Face token for private models.
-            - conversations (list): List of conversation lists
+            - conversation (list): List of conversation lists
             - chat_template (str, optional): The template to use
             - tools (list, optional): Tool schemas
             - documents (list, optional): Document schemas
             - return_assistant_tokens_mask (bool, optional): Whether to return assistant tokens mask
             - continue_final_message (bool, optional): Whether to continue final message
             - add_generation_prompt (bool, optional): Whether to add generation prompt
-            - kwargs (dict, optional): Additional rendering variables
-            - isVLLM / - isSGLang enum
-            
+            - chat_template_kwargs (dict, optional): Additional rendering variables
+
     Returns:
-        str: JSON string containing 'rendered_chats' and 'generation_indices' keys.
+        str: The rendered chat template as a string.
     """
 
     try:
@@ -118,9 +116,6 @@ def encode(request_json: str) -> str:
             - download_dir (str, optional): Directory to download the model.
             - text (str): The text to encode.
             - token (str, optional): Hugging Face token for private models.
-            - isVLLM (bool, optional): Whether to use VLLM tokenizer.
-            - isSGLang (bool, optional): Whether to use SG-Lang tokenizer.
-            - ....
 
     Returns:
         str: JSON string containing 'encoded_texts' key with list of token ID lists.
