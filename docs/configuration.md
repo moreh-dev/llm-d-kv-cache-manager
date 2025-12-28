@@ -14,14 +14,34 @@ See the [Architecture Overview](architecture.md) for a high-level view of how th
 The two components are configured separately, but share the index backend for storing KV block localities.
 The latter is configured via the `kvBlockIndexConfig` field in the KV Cache Indexer configuration.
 
+### Main Configuration Structure
+
+The main configuration structure for the llm-d KV Cache system.
+
+```json
+{
+  "tokenProcessorConfig": {
+    "blockSize": 16,
+    "hashSeed": "12345"
+  },
+  "indexerConfig": { ... },
+  "kvEventsConfig": { ... }
+}
+```
+
+| Field | Type | Description | Default |
+|-------|------|-------------|---------|
+| `tokenProcessorConfig` | [TokenProcessorConfig](#token-processor-configuration-tokenprocessorconfig) | Configuration for token processing | See defaults |
+| `indexerConfig` | [IndexerConfig](#indexer-configuration-indexerconfig) | Configuration for the KV Cache Indexer module | See defaults |
+| `kvEventsConfig` | [KVEventsConfig](#kv-event-pool-configuration-config) | Configuration for the KV Event Processing pool | See defaults |
+
 ### Indexer Configuration (`Config`)
 
-The main configuration structure for the KV Cache Indexer module.
+The indexer configuration structure for the KV Cache Indexer module.
 
 ```json
 {
   "prefixStoreConfig": { ... },
-  "tokenProcessorConfig": { ... },
   "kvBlockIndexConfig": { ... },
   "tokenizersPoolConfig": { ... },
   "kvCacheBackendConfigs": { ... }
@@ -31,7 +51,6 @@ The main configuration structure for the KV Cache Indexer module.
 | Field | Type | Description | Default |
 |-------|------|-------------|---------|
 | `prefixStoreConfig` | [LRUStoreConfig](#lru-store-configuration-lrustoreconfig) | Configuration for the prefix store | See defaults |
-| `tokenProcessorConfig` | [TokenProcessorConfig](#token-processor-configuration-tokenprocessorconfig) | Configuration for token processing | See defaults |
 | `kvBlockIndexConfig` | [IndexConfig](#index-configuration-indexconfig) | Configuration for KV block indexing | See defaults |
 | `tokenizersPoolConfig` | [Config](#tokenization-pool-configuration-config) | Configuration for tokenization pool | See defaults |
 | `kvCacheBackendConfigs` | [KVCacheBackendConfig](#kv-cache-backend-configuration-kvcachebackendconfig) | Configuration for KV Cache Device Backends | See defaults |
@@ -46,10 +65,6 @@ Here's a complete configuration example with all options:
   "prefixStoreConfig": {
     "cacheSize": 500000,
     "blockSize": 256
-  },
-  "tokenProcessorConfig": {
-    "blockSize": 16,
-    "hashSeed": "12345"
   },
   "kvBlockIndexConfig": {
     "inMemoryConfig": {
@@ -107,6 +122,24 @@ Configures the KV-block index backend. Multiple backends can be configured, but 
 | `redisConfig` | [RedisIndexConfig](#redis-index-configuration)        | Redis index configuration | `null` |
 | `enableMetrics` | `boolean`                                             | Enable admissions/evictions/hits/misses recording | `false` |
 | `metricsLoggingInterval` | `string` (duration) | Interval at which metrics are logged (e.g., `"1m0s"`). If zero or omitted, metrics logging is disabled. Requires `enableMetrics` to be `true`. | `"0s"` |
+
+## Token Processing Configuration
+
+### Token Processor Configuration (`TokenProcessorConfig`)
+
+Configures how tokens are converted to KV-block keys.
+
+```json
+{
+  "blockSize": 16,
+  "hashSeed": ""
+}
+```
+
+| Field | Type | Description | Default |
+|-------|------|-------------|---------|
+| `blockSize` | `integer` | Number of tokens per block | `16` |
+| `hashSeed` | `string` | Seed for hash generation (should align with vLLM's PYTHONHASHSEED) | `""` |
 
 ### In-Memory Index Configuration (`InMemoryIndexConfig`)
 
@@ -173,24 +206,6 @@ Configures the Valkey-backed KV block index implementation. Valkey is a Redis-co
 | `enableRDMA` | `boolean` | Enable RDMA transport (requires Valkey server with RDMA support) | `false` |
 
 **Note**: Both Redis and Valkey configurations use the same `RedisIndexConfig` structure since Valkey is API-compatible with Redis.
-
-## Token Processing Configuration
-
-### Token Processor Configuration (`TokenProcessorConfig`)
-
-Configures how tokens are converted to KV-block keys.
-
-```json
-{
-  "blockSize": 16,
-  "hashSeed": ""
-}
-```
-
-| Field | Type | Description | Default |
-|-------|------|-------------|---------|
-| `blockSize` | `integer` | Number of tokens per block | `16` |
-| `hashSeed` | `string` | Seed for hash generation (should align with vLLM's PYTHONHASHSEED) | `""` |
 
 ## Prefix Store Configuration
 
