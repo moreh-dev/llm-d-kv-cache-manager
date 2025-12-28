@@ -32,8 +32,26 @@ The main configuration structure for the llm-d KV Cache system.
 | Field | Type | Description | Default |
 |-------|------|-------------|---------|
 | `tokenProcessorConfig` | [TokenProcessorConfig](#token-processor-configuration-tokenprocessorconfig) | Configuration for token processing | See defaults |
-| `indexerConfig` | [IndexerConfig](#indexer-configuration-indexerconfig) | Configuration for the KV Cache Indexer module | See defaults |
+| `indexerConfig` | [IndexerConfig](#indexer-configuration-config) | Configuration for the KV Cache Indexer module | See defaults |
 | `kvEventsConfig` | [KVEventsConfig](#kv-event-pool-configuration-config) | Configuration for the KV Event Processing pool | See defaults |
+
+## Token Processing Configuration
+
+### Token Processor Configuration (`TokenProcessorConfig`)
+
+Configures how tokens are converted to KV-block keys.
+
+```json
+{
+  "blockSize": 16,
+  "hashSeed": ""
+}
+```
+
+| Field | Type | Description | Default |
+|-------|------|-------------|---------|
+| `blockSize` | `integer` | Number of tokens per block | `16` |
+| `hashSeed` | `string` | Seed for hash generation (should align with vLLM's PYTHONHASHSEED) | `""` |
 
 ### Indexer Configuration (`Config`)
 
@@ -122,24 +140,6 @@ Configures the KV-block index backend. Multiple backends can be configured, but 
 | `redisConfig` | [RedisIndexConfig](#redis-index-configuration)        | Redis index configuration | `null` |
 | `enableMetrics` | `boolean`                                             | Enable admissions/evictions/hits/misses recording | `false` |
 | `metricsLoggingInterval` | `string` (duration) | Interval at which metrics are logged (e.g., `"1m0s"`). If zero or omitted, metrics logging is disabled. Requires `enableMetrics` to be `true`. | `"0s"` |
-
-## Token Processing Configuration
-
-### Token Processor Configuration (`TokenProcessorConfig`)
-
-Configures how tokens are converted to KV-block keys.
-
-```json
-{
-  "blockSize": 16,
-  "hashSeed": ""
-}
-```
-
-| Field | Type | Description | Default |
-|-------|------|-------------|---------|
-| `blockSize` | `integer` | Number of tokens per block | `16` |
-| `hashSeed` | `string` | Seed for hash generation (should align with vLLM's PYTHONHASHSEED) | `""` |
 
 ### In-Memory Index Configuration (`InMemoryIndexConfig`)
 

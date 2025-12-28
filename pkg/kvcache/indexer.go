@@ -74,6 +74,9 @@ func NewKVCacheIndexer(ctx context.Context, config *Config, tokenProcessor kvblo
 	if config == nil {
 		return nil, fmt.Errorf("config cannot be nil")
 	}
+	if tokenProcessor == nil {
+		return nil, fmt.Errorf("tokenProcessor cannot be nil")
+	}
 
 	tokenIndexer, err := prefixstore.NewLRUTokenStore(config.PrefixStoreConfig)
 	if err != nil {
