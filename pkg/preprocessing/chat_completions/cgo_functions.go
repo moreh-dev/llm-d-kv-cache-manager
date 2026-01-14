@@ -67,6 +67,9 @@ type EncodeRequest struct {
 	AddSpecialTokens bool   `json:"add_special_tokens,omitempty"`
 }
 
+// Offset represents a character offset range with [start, end] indices.
+type Offset [2]uint
+
 type EncodeResponse struct {
 	TokenIDs       []uint32 `json:"input_ids"`
 	OffsetMappings []Offset `json:"offset_mapping"`
