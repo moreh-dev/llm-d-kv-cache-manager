@@ -234,7 +234,7 @@ func (pool *Pool) processTask(task Task) error {
 
 	// if the overlap ratio is low, get the full tokenization
 	if overlapRatio < pool.minPrefixOverlapRatio {
-		tokens, offsets, err := pool.tokenizer.Encode(&preprocessing.EncodeRequest{
+		tokens, offsets, err := pool.tokenizer.Encode(pool.modelName, &preprocessing.EncodeRequest{
 			Text:             task.Prompt,
 			AddSpecialTokens: addSpecialTokens,
 		})

@@ -57,8 +57,8 @@ func (m *MockTokenizer) ApplyChatTemplate(
 	return args.String(0), args.Error(1)
 }
 
-func (m *MockTokenizer) Encode(req *preprocessing.EncodeRequest) ([]uint32, []preprocessing.Offset, error) {
-	args := m.Called(req)
+func (m *MockTokenizer) Encode(modelName string, req *preprocessing.EncodeRequest) ([]uint32, []preprocessing.Offset, error) {
+	args := m.Called(modelName, req)
 	tokenIface := args.Get(0)
 	if tokenIface == nil {
 		return nil, nil, args.Error(2)
@@ -76,6 +76,10 @@ func (m *MockTokenizer) Encode(req *preprocessing.EncodeRequest) ([]uint32, []pr
 		panic("MockTokenizer.Encode: expected []preprocessing.Offset from mock, got unexpected type")
 	}
 	return tokens, offsets, args.Error(2)
+}
+
+func (m *MockTokenizer) Close() error {
+	return nil
 }
 
 func (m *MockTokenizer) Type() string {
@@ -122,7 +126,7 @@ func TestPool_ProcessTask(t *testing.T) {
 	// Mock FindLongestContainedTokens to return low overlap ratio
 	mockIndexer.On("FindLongestContainedTokens", task.Prompt).Return([]uint32{}, 0.0)
 
-	mockTokenizer.On("Encode", &preprocessing.EncodeRequest{Text: task.Prompt, AddSpecialTokens: true}).
+	mockTokenizer.On("Encode", pool.modelName, &preprocessing.EncodeRequest{Text: task.Prompt, AddSpecialTokens: true}).
 		Return(expectedTokens, expectedOffsets, nil)
 
 	// Verify that indexer receives exactly the same tokens and offsets that tokenizer returned
@@ -146,7 +150,7 @@ func TestPool_WorkerLoop(t *testing.T) {
 		"successful task processing": {
 			setupMocks: func(mi *MockIndexer, mt *MockTokenizer) {
 				mi.On("FindLongestContainedTokens", "test prompt").Return([]uint32{}, 0.0)
-				mt.On("Encode", &preprocessing.EncodeRequest{Text: "test prompt", AddSpecialTokens: true}).
+				mt.On("Encode", testModelName, &preprocessing.EncodeRequest{Text: "test prompt", AddSpecialTokens: true}).
 					Return([]uint32{1, 2, 3}, []preprocessing.Offset{{0, 4}}, nil)
 				mi.On("AddTokenization", "test prompt", []uint32{1, 2, 3}, []preprocessing.Offset{{0, 4}}).Return(nil)
 			},
@@ -158,7 +162,7 @@ func TestPool_WorkerLoop(t *testing.T) {
 		"task with result channel": {
 			setupMocks: func(mi *MockIndexer, mt *MockTokenizer) {
 				mi.On("FindLongestContainedTokens", "test with channel").Return([]uint32{}, 0.0)
-				mt.On("Encode", &preprocessing.EncodeRequest{Text: "test with channel", AddSpecialTokens: true}).
+				mt.On("Encode", testModelName, &preprocessing.EncodeRequest{Text: "test with channel", AddSpecialTokens: true}).
 					Return([]uint32{10, 20, 30}, []preprocessing.Offset{{0, 4}}, nil)
 				mi.On("AddTokenization", "test with channel", []uint32{10, 20, 30}, []preprocessing.Offset{{0, 4}}).Return(nil)
 			},
@@ -194,7 +198,7 @@ func TestPool_WorkerLoop(t *testing.T) {
 					offsets := []preprocessing.Offset{{0, 6}}
 
 					mi.On("FindLongestContainedTokens", prompt).Return([]uint32{}, 0.0).Once()
-					mt.On("Encode", &preprocessing.EncodeRequest{Text: prompt, AddSpecialTokens: true}).Return(tokens, offsets, nil).Once()
+					mt.On("Encode", testModelName, &preprocessing.EncodeRequest{Text: prompt, AddSpecialTokens: true}).Return(tokens, offsets, nil).Once()
 					mi.On("AddTokenization", prompt, tokens, offsets).Return(nil).Once()
 				}
 			},
@@ -216,7 +220,7 @@ func TestPool_WorkerLoop(t *testing.T) {
 			setupMocks: func(mi *MockIndexer, mt *MockTokenizer) {
 				// Mock will fail every time, causing retries
 				mi.On("FindLongestContainedTokens", "failing prompt").Return([]uint32{}, 0.0)
-				mt.On("Encode", &preprocessing.EncodeRequest{Text: "failing prompt", AddSpecialTokens: true}).Return(
+				mt.On("Encode", testModelName, &preprocessing.EncodeRequest{Text: "failing prompt", AddSpecialTokens: true}).Return(
 					[]uint32{}, []preprocessing.Offset{}, assert.AnError)
 			},
 			genTasks: func() ([]Task, chan tokenizationResponse) {

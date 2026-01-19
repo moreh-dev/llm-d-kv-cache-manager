@@ -102,7 +102,7 @@ func (s *KVCacheSuite) SetupTest() {
 func (s *KVCacheSuite) promptToEngineAndRequestKeys(
 	prompt, model string,
 ) (engineKeys, requestKeys []kvblock.Key) {
-	tokens, _, err := s.tokenizer.Encode(&preprocessing.EncodeRequest{Text: prompt, AddSpecialTokens: true})
+	tokens, _, err := s.tokenizer.Encode(model, &preprocessing.EncodeRequest{Text: prompt, AddSpecialTokens: true})
 	s.Require().NoError(err)
 
 	requestKeys = s.tokenProcessor.TokensToKVBlockKeys(nil, tokens, model)

@@ -35,7 +35,7 @@ import (
 type Tokenizer interface {
 	ApplyChatTemplate(string, *preprocessing.ApplyChatTemplateRequest) (string, error)
 	// Encode tokenizes the input string and returns the token IDs and offsets.
-	Encode(*preprocessing.EncodeRequest) ([]uint32, []preprocessing.Offset, error)
+	Encode(string, *preprocessing.EncodeRequest) ([]uint32, []preprocessing.Offset, error)
 	Type() string
 }
 
@@ -358,7 +358,7 @@ func (t *CachedTokenizer) ApplyChatTemplate(
 
 // Encode converts a string into token IDs.
 // The modelName parameter is ignored since this tokenizer is bound to a specific model.
-func (t *CachedTokenizer) Encode(req *preprocessing.EncodeRequest) ([]uint32, []preprocessing.Offset, error) {
+func (t *CachedTokenizer) Encode(_ string, req *preprocessing.EncodeRequest) ([]uint32, []preprocessing.Offset, error) {
 	ctx := context.TODO()
 
 	req.Key = t.tokenizerCacheKey
@@ -438,7 +438,7 @@ func (c *CompositeTokenizer) ApplyChatTemplate(
 //  4. If all fail, returns all accumulated errors
 //
 // This enables prioritizing local tokenizers while maintaining HuggingFace as a fallback.
-func (c *CompositeTokenizer) Encode(req *preprocessing.EncodeRequest) ([]uint32, []preprocessing.Offset, error) {
+func (c *CompositeTokenizer) Encode(modelName string, req *preprocessing.EncodeRequest) ([]uint32, []preprocessing.Offset, error) {
 	var rErr error
 	for _, tokenizer := range c.Tokenizers {
 		copiedReq, err := req.DeepCopy()
@@ -447,7 +447,7 @@ func (c *CompositeTokenizer) Encode(req *preprocessing.EncodeRequest) ([]uint32,
 			continue
 		}
 		start := time.Now()
-		ids, offsets, err := tokenizer.Encode(copiedReq)
+		ids, offsets, err := tokenizer.Encode(modelName, copiedReq)
 		metrics.TokenizationLatency.WithLabelValues(tokenizer.Type()).Observe(time.Since(start).Seconds())
 		if err != nil {
 			rErr = multierr.Append(rErr, err)
