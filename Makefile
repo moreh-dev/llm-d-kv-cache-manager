@@ -131,15 +131,6 @@ setup-venv: detect-python ## Sets up the Python virtual environment.
 .PHONY: install-python-deps
 install-python-deps: setup-venv ## installs dependencies.
 	@printf "\033[33;1m==== Setting up Python virtual environment in $(VENV_DIR) ====\033[0m\n"
-	@if [ ! -f "$(VENV_BIN)/pip" ]; then \
-		echo "Creating virtual environment..."; \
-		$(PYTHON_EXE) -m venv $(VENV_DIR) || { \
-			echo "ERROR: Failed to create virtual environment."; \
-			echo "Your Python installation may be missing the 'venv' module."; \
-			echo "Try: 'sudo apt install python$(PYTHON_VERSION)-venv' or 'sudo dnf install python$(PYTHON_VERSION)-devel'"; \
-			exit 1; \
-		}; \
-	fi
 	@echo "Upgrading pip and installing dependencies..."
 	@PATH=$(VENV_BIN):$$PATH ./pkg/preprocessing/chat_completions/setup.sh
 	@echo "Verifying vllm installation..."
