@@ -31,25 +31,56 @@ import (
 )
 
 const (
-	DefaultDeviceTier = "gpu"
+	defaultEventSourceDeviceTier = "GPU"
+	defaultPodSelector           = "llm-d.ai/inferenceServing=true"
 )
 
 // Config holds the configuration for the event processing pool.
 type Config struct {
 	// ZMQEndpoint is the ZMQ address to connect to (e.g., "tcp://indexer:5557").
-	ZMQEndpoint string `json:"zmqEndpoint"`
-	// TopicFilter is the ZMQ subscription filter (e.g., "kv.").
+	ZMQEndpoint string `json:"zmqEndpoint,omitempty"`
+	// TopicFilter is the ZMQ subscription filter (e.g., "kv@").
 	TopicFilter string `json:"topicFilter"`
 	// Concurrency is the number of parallel workers to run.
 	Concurrency int `json:"concurrency"`
+	// DiscoverPods enables the Kubernetes pod reconciler for automatic
+	// per-pod subscriber management. When enabled, the reconciler watches
+	// Kubernetes pods and creates/removes ZMQ subscribers dynamically.
+	DiscoverPods bool `json:"discoverPods"`
+	// PodDiscoveryConfig holds the configuration for pod discovery.
+	// Only used when DiscoverPods is true.
+	PodDiscoveryConfig *PodDiscoveryConfig `json:"podDiscoveryConfig,omitempty"`
+}
+
+// PodDiscoveryConfig holds configuration for the Kubernetes pod reconciler.
+type PodDiscoveryConfig struct {
+	// PodLabelSelector is a label selector string for filtering which pods to watch.
+	// Example: "app=vllm" or "app=vllm,tier=gpu"
+	PodLabelSelector string `json:"podLabelSelector"`
+	// PodNamespace limits the reconciler to watch pods in a specific namespace.
+	// If empty, watches all namespaces (requires appropriate RBAC).
+	PodNamespace string `json:"podNamespace,omitempty"`
+	// SocketPort is the port number where vLLM pods expose their ZMQ socket.
+	// The reconciler will connect to tcp://<PodIP>:<SocketPort>
+	// Default: 5557
+	SocketPort int `json:"socketPort"`
+}
+
+// DefaultPodReconcilerConfig returns a default configuration for the pod reconciler.
+func DefaultPodReconcilerConfig() *PodDiscoveryConfig {
+	return &PodDiscoveryConfig{
+		PodLabelSelector: defaultPodSelector,
+		SocketPort:       5557,
+	}
 }
 
 // DefaultConfig returns a default configuration for the event processing pool.
 func DefaultConfig() *Config {
 	return &Config{
-		ZMQEndpoint: "tcp://*:5557",
-		TopicFilter: "kv@",
-		Concurrency: 4,
+		TopicFilter:        "kv@",
+		Concurrency:        4,
+		DiscoverPods:       true,
+		PodDiscoveryConfig: DefaultPodReconcilerConfig(),
 	}
 }
 
@@ -66,18 +97,19 @@ type Message struct {
 	ModelName string
 }
 
-// Pool is a sharded worker pool that processes events from a ZMQ subscriber.
+// Pool is a sharded worker pool that processes events from ZMQ subscribers.
 // It ensures that events for the same PodIdentifier are processed in order.
 type Pool struct {
 	queues         []workqueue.TypedRateLimitingInterface[*Message]
 	concurrency    int // can replace use with len(queues)
-	subscriber     *zmqSubscriber
 	index          kvblock.Index
 	tokenProcessor kvblock.TokenProcessor
 	wg             sync.WaitGroup
 }
 
 // NewPool creates a Pool with a sharded worker setup.
+// Subscribers are managed by SubscriberManager which is controlled by the pod
+// reconciler.
 func NewPool(cfg *Config, index kvblock.Index, tokenProcessor kvblock.TokenProcessor) *Pool {
 	if cfg == nil {
 		cfg = DefaultConfig()
@@ -94,11 +126,10 @@ func NewPool(cfg *Config, index kvblock.Index, tokenProcessor kvblock.TokenProce
 		p.queues[i] = workqueue.NewTypedRateLimitingQueue(workqueue.DefaultTypedControllerRateLimiter[*Message]())
 	}
 
-	p.subscriber = newZMQSubscriber(p, cfg.ZMQEndpoint, cfg.TopicFilter)
 	return p
 }
 
-// Start begins the worker pool and the ZMQ subscriber.
+// Start begins the worker pool.
 // It is non-blocking.
 func (p *Pool) Start(ctx context.Context) {
 	logger := log.FromContext(ctx)
@@ -109,11 +140,9 @@ func (p *Pool) Start(ctx context.Context) {
 		// Each worker is given its own dedicated queue shard.
 		go p.worker(ctx, i)
 	}
-
-	go p.subscriber.Start(ctx)
 }
 
-// Shutdown gracefully stops the pool and its subscriber.
+// Shutdown gracefully stops the pool and its global subscriber if present.
 func (p *Pool) Shutdown(ctx context.Context) {
 	logger := log.FromContext(ctx)
 	logger.Info("Shutting down event processing pool...")
@@ -213,12 +242,12 @@ func (p *Pool) digestEvents(ctx context.Context, podIdentifier, modelName string
 		case BlockStored:
 			// Default to gpu.
 			// For non-gpu events, vLLM KV event has a non-empty Medium field.
-			deviceTier := DefaultDeviceTier
+			deviceTier := defaultEventSourceDeviceTier
 			if ev.Medium != nil {
 				deviceTier = strings.ToLower(*ev.Medium)
 			}
 
-			// Use LoRA name for hashing if available, otherwise fall back to base model name.
+			// Use LoRA name as model identifier if available, otherwise fall back to base model name.
 			effectiveModelName := modelName
 			if ev.LoraName != nil && *ev.LoraName != "" {
 				effectiveModelName = *ev.LoraName
@@ -228,7 +257,7 @@ func (p *Pool) digestEvents(ctx context.Context, podIdentifier, modelName string
 			podEntries := []kvblock.PodEntry{{PodIdentifier: podIdentifier, DeviceTier: deviceTier}}
 
 			// Create a slice to hold the processed keys.
-			engineKeys := make([]kvblock.Key, 0, len(ev.BlockHashes))
+			engineKeys := make([]kvblock.BlockHash, 0, len(ev.BlockHashes))
 
 			// Iterate over the hashes, convert each one to uint64, and create a key.
 			for _, rawHash := range ev.BlockHashes {
@@ -237,10 +266,10 @@ func (p *Pool) digestEvents(ctx context.Context, podIdentifier, modelName string
 					debugLogger.Error(err, "Failed to convert block hash for BlockStored event", "rawHash", rawHash)
 					continue
 				}
-				engineKeys = append(engineKeys, kvblock.Key{ModelName: effectiveModelName, ChunkHash: hash})
+				engineKeys = append(engineKeys, kvblock.BlockHash(hash))
 			}
 
-			var parentRequestKey *kvblock.Key
+			var parentRequestKey kvblock.BlockHash
 			if ev.ParentBlockHash != nil {
 				hash, err := getHashAsUint64(ev.ParentBlockHash)
 				if err != nil {
@@ -249,15 +278,15 @@ func (p *Pool) digestEvents(ctx context.Context, podIdentifier, modelName string
 					continue
 				}
 
-				parentEngineKey := kvblock.Key{ModelName: effectiveModelName, ChunkHash: hash}
+				parentEngineKey := kvblock.BlockHash(hash)
 
 				key, err := p.index.GetRequestKey(ctx, parentEngineKey)
 				if err != nil {
 					debugLogger.Error(err, "Failed to get request key for parent block",
-						"parentEngineKey", parentEngineKey)
+						"parentEngineKey", parentEngineKey, "effectiveModelName", effectiveModelName)
 					continue
 				}
-				parentRequestKey = &key
+				parentRequestKey = key
 			}
 
 			requestKeys := p.tokenProcessor.TokensToKVBlockKeys(parentRequestKey, ev.TokenIds, effectiveModelName)
@@ -274,7 +303,7 @@ func (p *Pool) digestEvents(ctx context.Context, podIdentifier, modelName string
 		case BlockRemoved:
 			// Default to gpu.
 			// For non-gpu events, vLLM KV event has a non-empty Medium field.
-			deviceTier := DefaultDeviceTier
+			deviceTier := defaultEventSourceDeviceTier
 			if ev.Medium != nil {
 				deviceTier = strings.ToLower(*ev.Medium)
 			}
@@ -289,7 +318,7 @@ func (p *Pool) digestEvents(ctx context.Context, podIdentifier, modelName string
 					debugLogger.Error(err, "Failed to convert block hash for BlockRemoved event", "rawHash", rawHash)
 					continue
 				}
-				engineKey := kvblock.Key{ModelName: modelName, ChunkHash: hash}
+				engineKey := kvblock.BlockHash(hash)
 				if err := p.index.Evict(ctx, engineKey, podEntries); err != nil {
 					debugLogger.Error(err, "Failed to remove event from index",
 						"podIdentifier", podIdentifier, "event", ev)
